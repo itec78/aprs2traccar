@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import logging
 import os
 import signal
@@ -7,31 +9,16 @@ import aprslib
 import geopy.distance
 import requests
 
-ATTR_ACCURACY = 'accuracy'
-ATTR_ALTITUDE = 'altitude'
-ATTR_COMMENT = 'comment'
-ATTR_COURSE = 'course'
-ATTR_FORMAT = 'format'
-ATTR_FROM = 'from'
-ATTR_LATITUDE = 'latitude'
-ATTR_LONGITUDE = 'longitude'
-ATTR_POS_AMBIGUITY = 'posambiguity'
-ATTR_SPEED = 'speed'
 DEFAULT_APRS_HOST = 'rotate.aprs.net'
-DEFAULT_APRS_PASSWORD = '-1'
 DEFAULT_TRACCAR_HOST = 'http://traccar:8082'
-FILTER_PORT = 14580
+DEFAULT_APRS_PORT = 14580
 MSG_FORMATS = ['compressed', 'uncompressed', 'mic-e']
-Q_ID = 'id'
-Q_LAT = 'lat'
-Q_LON = 'lon'
 
 LOGGER = logging.getLogger(__name__)
 
 
 def gps_accuracy(gps, posambiguity: int) -> int:
-    """Calculate the GPS accuracy based on APRS posambiguity."""
-
+    # Calculate the GPS accuracy based on APRS posambiguity.
     pos_a_map = {0: 0,
                  1: 1 / 600,
                  2: 1 / 60,
@@ -42,35 +29,29 @@ def gps_accuracy(gps, posambiguity: int) -> int:
 
         gps2 = (gps[0], gps[1] + degrees)
         dist_m = geopy.distance.distance(gps, gps2).m
-
         accuracy = round(dist_m)
     else:
         message = "APRS position ambiguity must be 0-4, not '{0}'.".format(
             posambiguity)
         raise ValueError(message)
-
     return accuracy
 
 
 class AprsListenerThread(threading.Thread):
-    """APRS message listener."""
+    # APRS message listener.
 
-    def __init__(self, callsign: str,
-            aprs_host: str,
-            aprs_server_filter: str,
-            traccar_host: str,
-            aprs_password: str = DEFAULT_APRS_PASSWORD):
-        """Initialize the class."""
+    def __init__(self, callsign: str, aprs_host: str, aprs_server_filter: str, traccar_host: str):
+        # Initialize the class.
         super().__init__()
 
         self.callsign = callsign
         self.aprs_server_filter = aprs_server_filter
         self.traccar_host = traccar_host
 
-        self.ais = aprslib.IS(self.callsign, passwd=aprs_password, host=aprs_host, port=FILTER_PORT)
+        self.ais = aprslib.IS(self.callsign, host=aprs_host, port=DEFAULT_APRS_PORT)
 
     def run(self):
-        """Connect to APRS and listen for data."""
+        # Connect to APRS and listen for data.
         self.ais.set_filter(self.aprs_server_filter)
 
         try:
@@ -81,12 +62,12 @@ class AprsListenerThread(threading.Thread):
             LOGGER.info(f"Closing connection to APRS with callsign {self.callsign}.")
 
     def stop(self):
-        """Close the connection to the APRS network."""
+        # Close the connection to the APRS network.
         LOGGER.debug(f"stop()")
         self.ais.close()
 
     def tx_to_traccar(self, query: str):
-        """Send position report to Traccar server"""
+        # Send position report to Traccar server
         LOGGER.debug(f"tx_to_traccar({query})")
         url = f"{self.traccar_host}/?{query}"
         try:
@@ -102,30 +83,30 @@ class AprsListenerThread(threading.Thread):
             logging.exception(f"Error sending to {url}")
 
     def rx_msg(self, msg: dict):
-        """Receive message and process if position."""
-        LOGGER.debug("APRS message received: %s", str(msg))
-        if msg[ATTR_FORMAT] in MSG_FORMATS:
-            dev_id = msg[ATTR_FROM]
-            lat = msg[ATTR_LATITUDE]
-            lon = msg[ATTR_LONGITUDE]
+        # Receive message and process if position.
+        LOGGER.info("APRS message received: %s", str(msg))
+        if msg['format'] in MSG_FORMATS:
+            dev_id = msg['from']
+            lat = msg['latitude']
+            lon = msg['longitude']
 
-            query_string = f"{Q_ID}={dev_id}&{Q_LAT}={lat}&{Q_LON}={lon}"
+            query_string = f"id={dev_id}&lat={lat}&lon={lon}"
 
-            if ATTR_POS_AMBIGUITY in msg:
-                pos_amb = msg[ATTR_POS_AMBIGUITY]
+            if 'posambiguity' in msg:
+                pos_amb = msg['posambiguity']
                 try:
-                    query_string += f"&{ATTR_ACCURACY}={gps_accuracy((lat, lon), pos_amb)}"
+                    query_string += f"&accuracy={gps_accuracy((lat, lon), pos_amb)}"
                 except ValueError:
                     LOGGER.warning(f"APRS message contained invalid posambiguity: {pos_amb}")
-            for attr in [ATTR_ALTITUDE,
-                         ATTR_SPEED]:
+
+            for attr in ['altitude', 'speed']:
                 if attr in msg:
                     query_string += f"&{attr}={msg[attr]}"
-
+            
             try:
                 self.tx_to_traccar(query_string)
             except ValueError:
-                logging.warning(f"{Q_ID}={dev_id}")
+                logging.warning(f"id={dev_id}")
 
 
 if __name__ == '__main__':
@@ -146,12 +127,11 @@ if __name__ == '__main__':
     callsign = os.environ.get("CALLSIGN")
     aprs_host = os.environ.get("APRS_HOST", DEFAULT_APRS_HOST)
     filter = os.environ.get("APRS_FILTER", f"b/{callsign}")
-    password = os.environ.get("APRS_PASSWORD", DEFAULT_APRS_PASSWORD)
     traccar_host = os.environ.get("TRACCAR_HOST", DEFAULT_TRACCAR_HOST)
 
     if not callsign:
         logging.fatal("Please provide your callsign to login to the APRS server.")
         exit(1)
 
-    ALT = AprsListenerThread(callsign, aprs_host, filter, traccar_host, password)
+    ALT = AprsListenerThread(callsign, aprs_host, filter, traccar_host)
     ALT.run()
