@@ -102,6 +102,11 @@ class AprsListenerThread(threading.Thread):
             for attr in ['altitude', 'speed']:
                 if attr in msg:
                     query_string += f"&{attr}={msg[attr]}"
+
+            #extra attributes
+            for attr in ['from', 'to', 'path', 'via', 'symbol', 'symbol_table', 'comment']:
+                if attr in msg:
+                    query_string += f"&APRS_{attr}={msg[attr]}"
             
             try:
                 self.tx_to_traccar(query_string)
