@@ -1,6 +1,7 @@
 # About
 
-This little Docker container will connect to [APRS-IS](http://aprs-is.net/) over the internet and copy APRS position reports into device locations in a [Traccar](https://www.traccar.org/) server.
+This little Docker container will connect to [APRS-IS](http://aprs-is.net/) over the internet and copy APRS position reports into device locations in a [Traccar](https://www.traccar.org/) server.  
+In a multi-user environment it allows users to configure devices without involving the administrator.  
 Forked from [PhilRW/aprs2traccar](https://github.com/PhilRW/aprs2traccar)
 ## How to
 
