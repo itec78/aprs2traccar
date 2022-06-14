@@ -138,7 +138,7 @@ class AprsListenerThread(threading.Thread):
 
 
 
-class Traccar2APRS():
+class APRS2Traccar():
     def __init__(self,  TraccarHost: str, TraccarUser: str, TraccarPassword: str, TraccarKeyword: str, AprsCallsign: str, AprsHost: str):
         # Initialize the class.
         super().__init__()
@@ -224,11 +224,11 @@ if __name__ == '__main__':
         logging.fatal("Please provide your callsign to login to the APRS server.")
         exit(1)
 
-    T2A = Traccar2APRS(traccar_host, traccar_user, traccar_password, traccar_keyword, aprs_callsign, aprs_host)
+    A2T = APRS2Traccar(traccar_host, traccar_user, traccar_password, traccar_keyword, aprs_callsign, aprs_host)
 
     logging.getLogger('apscheduler.executors.default').setLevel(logging.WARNING)
     sched = BlockingScheduler()
-    sched.add_job(T2A.poll, 'interval', next_run_time=datetime.now(), seconds=traccar_interval)
+    sched.add_job(A2T.poll, 'interval', next_run_time=datetime.now(), seconds=traccar_interval)
     sched.start()
 
 
