@@ -115,9 +115,10 @@ class AprsListenerThread(threading.Thread):
                 except ValueError:
                     LOGGER.warning(f"APRS message contained invalid posambiguity: {pos_amb}")
 
-            for attr in ['altitude', 'speed', 'bearing']:
+            for attr in ['altitude', 'speed', 'course']:
                 if attr in msg:
-                    query_string += f"&{attr}={msg[attr]}"
+                    #traccar needs bearing instead of course
+                    query_string += f"&{attr.replace('course','bearing')}={msg[attr]}"
 
             # extra attributes
             for attr in ['from', 'to', 'path', 'via', 'symbol', 'symbol_table', 'comment']:
