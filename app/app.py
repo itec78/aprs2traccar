@@ -46,6 +46,31 @@ def gps_accuracy(gps, posambiguity: int) -> int:
     return accuracy
 
 
+class AprsPayloadHistory():
+    def __init__(self):
+        self.hist = {}
+        
+    def duplicate(self, payload, dt = datetime.now()):
+
+        callsign = payload.split('>')[0]
+        payloaddata = payload.split(':')[1]
+
+        dict_callsign = self.hist.get(callsign, {})
+
+        for k in list(dict_callsign.keys()):
+            # print(k, dict_callsign[k], (dt - dict_callsign[k]).total_seconds())
+            if (dt - dict_callsign[k]).total_seconds() > 1800:
+                del dict_callsign[k]
+
+        if dict_callsign.get(payloaddata):
+            exitstatus = True
+        else:
+            dict_callsign[payloaddata] = dt
+            exitstatus = False
+
+        self.hist[callsign] = dict_callsign
+        return(exitstatus)
+
 
 
 class AprsListenerThread(threading.Thread):
@@ -59,6 +84,7 @@ class AprsListenerThread(threading.Thread):
         self.aprs_filter_dict = aprs_filter_dict
         self.traccar_host = traccar_host
         self.ais = aprslib.IS(aprs_callsign, host=aprs_host, port=DEFAULT_APRS_PORT)
+        self.aph = AprsPayloadHistory()
 
     def run(self):
         # Connect to APRS and listen for data.
@@ -103,38 +129,42 @@ class AprsListenerThread(threading.Thread):
         LOGGER.debug("APRS message received: %s", str(msg))
 
         if msg['format'] in MSG_FORMATS:
-            lat = msg['latitude']
-            lon = msg['longitude']
 
-            query_string = ""
+            if self.aph.duplicate(msg['raw']):
+                logging.debug(f"Duplicate position packet: {msg['raw']}")
+            else:
+                lat = msg['latitude']
+                lon = msg['longitude']
 
-            if 'posambiguity' in msg:
-                pos_amb = msg['posambiguity']
-                try:
-                    query_string += f"&accuracy={gps_accuracy((lat, lon), pos_amb)}"
-                except ValueError:
-                    LOGGER.warning(f"APRS message contained invalid posambiguity: {pos_amb}")
+                query_string = ""
 
-            for attr in ['altitude', 'speed', 'course']:
-                if attr in msg:
-                    #traccar needs bearing instead of course
-                    query_string += f"&{attr.replace('course','bearing')}={msg[attr]}"
+                if 'posambiguity' in msg:
+                    pos_amb = msg['posambiguity']
+                    try:
+                        query_string += f"&accuracy={gps_accuracy((lat, lon), pos_amb)}"
+                    except ValueError:
+                        LOGGER.warning(f"APRS message contained invalid posambiguity: {pos_amb}")
 
-            # extra attributes
-            for attr in ['from', 'to', 'path', 'via', 'symbol', 'symbol_table', 'comment']:
-                if attr in msg:
-                    query_string += f"&APRS_{attr}={msg[attr]}"
+                for attr in ['altitude', 'speed', 'course']:
+                    if attr in msg:
+                        #traccar needs bearing instead of course
+                        query_string += f"&{attr.replace('course','bearing')}={msg[attr]}"
 
-            # icon
-            query_string += f"&APRS_icon=%s" % aprs2emoji(msg['symbol_table'],msg['symbol'])
+                # extra attributes
+                for attr in ['from', 'to', 'path', 'via', 'symbol', 'symbol_table', 'comment']:
+                    if attr in msg:
+                        query_string += f"&APRS_{attr}={msg[attr]}"
 
-            dev_ids = self.aprs_filter_dict.get(msg['from'])
-            for dev_id in dev_ids:
-                query_fullstring = f"id={dev_id}&lat={lat}&lon={lon}" + query_string
-                try:
-                    self.tx_to_traccar(query_fullstring)
-                except ValueError:
-                    logging.warning(f"id={dev_id}")
+                # icon
+                query_string += f"&APRS_icon=%s" % aprs2emoji(msg['symbol_table'],msg['symbol'])
+
+                dev_ids = self.aprs_filter_dict.get(msg['from'])
+                for dev_id in dev_ids:
+                    query_fullstring = f"id={dev_id}&lat={lat}&lon={lon}" + query_string
+                    try:
+                        self.tx_to_traccar(query_fullstring)
+                    except ValueError:
+                        logging.warning(f"id={dev_id}")
 
 
 
