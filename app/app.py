@@ -151,9 +151,14 @@ class AprsListenerThread(threading.Thread):
                         query_string += f"&{attr.replace('course','bearing')}={msg[attr]}"
 
                 # extra attributes
-                for attr in ['from', 'to', 'path', 'via', 'symbol', 'symbol_table', 'comment']:
+                for attr in ['from', 'to', 'via', 'symbol', 'symbol_table', 'comment']:
                     if attr in msg:
                         query_string += f"&APRS_{attr}={msg[attr]}"
+                        
+                # path
+                for attr in ['path']:
+                    if attr in msg:
+                        query_string += f"&APRS_{attr}={','.join(msg[attr])}"
 
                 # icon
                 query_string += f"&APRS_icon=%s" % aprs2emoji(msg['symbol_table'],msg['symbol'])
