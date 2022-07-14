@@ -53,23 +53,39 @@ class AprsPayloadHistory():
     def duplicate(self, payload, dt = datetime.now()):
 
         callsign = payload.split('>')[0]
-        payloaddata = payload.split(':')[1]
-
+        payloadpath = payload.split('>')[1].split(':')[0]
+        payloaddata = payload.split(':')[1] 
         dict_callsign = self.hist.get(callsign, {})
 
+        # clean old data
         for k in list(dict_callsign.keys()):
-            # print(k, dict_callsign[k], (dt - dict_callsign[k]).total_seconds())
-            if (dt - dict_callsign[k]).total_seconds() > 1800:
+            for j in list(dict_callsign[k].keys()):
+                # print(j, (dt - dict_callsign[k][j]).total_seconds())
+                if (dt - dict_callsign[k][j]).total_seconds() > 1800:
+                    del dict_callsign[k][j]
+            if not list(dict_callsign[k].keys()):
                 del dict_callsign[k]
 
-        if dict_callsign.get(payloaddata):
-            exitstatus = True
-        else:
-            dict_callsign[payloaddata] = dt
-            exitstatus = False
 
+        dict_path = dict_callsign.get(payloaddata)
+        if not dict_path:
+            # if payload doesn't exists, it can't be duplicate
+            dict_path = {}
+            exitstatus = False
+        else:
+            if dict_path.get(payloadpath):
+                # if path exists, payload is not duplicate
+                dict_path = {}
+                exitstatus = False
+            else:
+                exitstatus = True
+        
+        dict_path[payloadpath] = dt
+        dict_callsign[payloaddata] = dict_path
         self.hist[callsign] = dict_callsign
+        
         return(exitstatus)
+        
 
 
 
