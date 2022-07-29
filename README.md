@@ -30,7 +30,7 @@ Clone this repo and then add this to your `docker-compose.yml` file:
   * `TRACCAR_HOST` is your Traccar server's URI/URL. If run in the same docker-compose stack, name your Traccar service `traccar` and omit this env var.
   * `TRACCAR_USER` is your Traccar server's username. It should be the admin or an admin user with readonly permission.
   * `TRACCAR_PASSWORD` is your Traccar server's password.
-  * `TRACCAR_KEYWORD` is the attribute name to be set in your device. The APRS callsign you want to import
+  * `TRACCAR_KEYWORD` is the attribute name to be set in your device.
   * `TRACCAR_INTERVAL` is the polling time (in seconds) of the traccar devices.
 
 
@@ -38,6 +38,6 @@ Clone this repo and then add this to your `docker-compose.yml` file:
 ### Traccar
 
 Create a device with arbitrary identifier.  
-Add a device attribute with Name = `TRACCAR_KEYWORD` and value = callsign you intend to track.  
+Add a device attribute with name = `TRACCAR_KEYWORD` and value = callsign you intend to track.  
 Wait `TRACCAR_INTERVAL` seconds in order for the changes takes effect.  
 
