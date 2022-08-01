@@ -21,6 +21,7 @@ Clone this repo and then add this to your `docker-compose.yml` file:
       - "TRACCAR_PASSWORD=pass" # optional but recommended
       - "TRACCAR_KEYWORD=aprs_in" # optional, defaults to aprs
       - "TRACCAR_INTERVAL=120" # optional, defaults to 60
+      - "TRACCAR_OSMAND=http://traccar.example.com:5055"  # optional, defaults to http://[TRACCAR_HOST]:5055
       - "LOG_LEVEL=DEBUG"  # optional, defaults to INFO
     restart: unless-stopped
   ```
@@ -32,7 +33,7 @@ Clone this repo and then add this to your `docker-compose.yml` file:
   * `TRACCAR_PASSWORD` is your Traccar server's password.
   * `TRACCAR_KEYWORD` is the attribute name to be set in your device.
   * `TRACCAR_INTERVAL` is the polling time (in seconds) of the traccar devices.
-
+  * `TRACCAR_OSMAND` is your Traccar server's Osmand protocol URL
 
 
 ### Traccar

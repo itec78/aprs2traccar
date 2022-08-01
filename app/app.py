@@ -11,6 +11,7 @@ import requests
 
 from apscheduler.schedulers.background import BlockingScheduler
 from datetime import datetime
+from urllib.parse import urlparse, urlunparse
 from requests.auth import HTTPBasicAuth
 import json
 import re
@@ -25,25 +26,6 @@ MSG_FORMATS = ['compressed', 'uncompressed', 'mic-e']
 
 LOGGER = logging.getLogger(__name__)
 
-
-def gps_accuracy(gps, posambiguity: int) -> int:
-    # Calculate the GPS accuracy based on APRS posambiguity.
-    pos_a_map = {0: 0,
-                 1: 1 / 600,
-                 2: 1 / 60,
-                 3: 1 / 6,
-                 4: 1}
-    if posambiguity in pos_a_map:
-        degrees = pos_a_map[posambiguity]
-
-        gps2 = (gps[0], gps[1] + degrees)
-        dist_m = geopy.distance.distance(gps, gps2).m
-        accuracy = round(dist_m)
-    else:
-        message = "APRS position ambiguity must be 0-4, not '{0}'.".format(
-            posambiguity)
-        raise ValueError(message)
-    return accuracy
 
 
 class AprsPayloadHistory():
@@ -88,17 +70,16 @@ class AprsPayloadHistory():
         
 
 
-
 class AprsListenerThread(threading.Thread):
     # APRS message listener.
 
-    def __init__(self, aprs_callsign: str, aprs_host: str, aprs_filter_dict: dict, traccar_host: str):
+    def __init__(self, aprs_callsign: str, aprs_host: str, aprs_filter_dict: dict, traccar_osmand: str):
         # Initialize the class.
         super().__init__()
 
         self.aprs_callsign = aprs_callsign
         self.aprs_filter_dict = aprs_filter_dict
-        self.traccar_host = traccar_host
+        self.traccar_osmand = traccar_osmand
         self.ais = aprslib.IS(aprs_callsign, host=aprs_host, port=DEFAULT_APRS_PORT)
         self.aph = AprsPayloadHistory()
 
@@ -124,10 +105,29 @@ class AprsListenerThread(threading.Thread):
         filter = ("b/%s" % "/".join(sorted(list(aprs_filter_dict.keys()))))
         self.ais.set_filter(filter)
 
+    def gps_accuracy(self, gps, posambiguity: int) -> int:
+        # Calculate the GPS accuracy based on APRS posambiguity.
+        pos_a_map = {0: 0,
+                    1: 1 / 600,
+                    2: 1 / 60,
+                    3: 1 / 6,
+                    4: 1}
+        if posambiguity in pos_a_map:
+            degrees = pos_a_map[posambiguity]
+
+            gps2 = (gps[0], gps[1] + degrees)
+            dist_m = geopy.distance.distance(gps, gps2).m
+            accuracy = round(dist_m)
+        else:
+            message = "APRS position ambiguity must be 0-4, not '{0}'.".format(
+                posambiguity)
+            raise ValueError(message)
+        return accuracy
+
     def tx_to_traccar(self, query: str):
         # Send position report to Traccar server
         LOGGER.debug(f"tx_to_traccar({query})")
-        url = f"{self.traccar_host}/?{query}"
+        url = f"{self.traccar_osmand}/?{query}"
         try:
             post = requests.post(url)
             logging.debug(f"POST {post.status_code} {post.reason} - {post.content.decode()}")
@@ -157,7 +157,7 @@ class AprsListenerThread(threading.Thread):
                 if 'posambiguity' in msg:
                     pos_amb = msg['posambiguity']
                     try:
-                        query_string += f"&accuracy={gps_accuracy((lat, lon), pos_amb)}"
+                        query_string += f"&accuracy={self.gps_accuracy((lat, lon), pos_amb)}"
                     except ValueError:
                         LOGGER.warning(f"APRS message contained invalid posambiguity: {pos_amb}")
 
@@ -191,16 +191,17 @@ class AprsListenerThread(threading.Thread):
 
 
 class APRS2Traccar():
-    def __init__(self,  TraccarHost: str, TraccarUser: str, TraccarPassword: str, TraccarKeyword: str, AprsCallsign: str, AprsHost: str):
+    def __init__(self, conf: dict):
         # Initialize the class.
         super().__init__()
 
-        self.TraccarHost = TraccarHost
-        self.TraccarUser = TraccarUser
-        self.TraccarPassword = TraccarPassword
-        self.TraccarKeyword = TraccarKeyword
-        self.AprsCallsign = AprsCallsign
-        self.AprsHost = AprsHost
+        self.TraccarHost = conf.get("TraccarHost")
+        self.TraccarUser = conf.get("TraccarUser")
+        self.TraccarPassword = conf.get("TraccarPassword")
+        self.TraccarKeyword = conf.get("TraccarKeyword")
+        self.AprsCallsign = conf.get("AprsCallsign")
+        self.AprsHost = conf.get("AprsHost")
+        self.TraccarOsmand = conf.get("TraccarOsmand")
 
         self.ALT = None
         self.lastfilterdict = []
@@ -230,7 +231,7 @@ class APRS2Traccar():
         if self.ALT is None or not self.ALT.is_alive():
             if filterdict:
                 # if it's not running and must run, start it
-                self.ALT = AprsListenerThread(self.AprsCallsign, self.AprsHost, filterdict, self.TraccarHost)
+                self.ALT = AprsListenerThread(self.AprsCallsign, self.AprsHost, filterdict, self.TraccarOsmand)
                 self.ALT.start()   
         else:
             if filterdict:
@@ -264,23 +265,30 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, sig_handler)
     signal.signal(signal.SIGINT, sig_handler)
 
-    traccar_host = os.environ.get("TRACCAR_HOST", DEFAULT_TRACCAR_HOST)
-    traccar_user = os.environ.get("TRACCAR_USER", "")
-    traccar_password = os.environ.get("TRACCAR_PASSWORD", "")
-    traccar_keyword = os.environ.get("TRACCAR_KEYWORD", DEFAULT_TRACCAR_KEYWORD)
-    traccar_interval = int(os.environ.get("TRACCAR_INTERVAL", DEFAULT_TRACCAR_INTERVAL))
-    aprs_callsign = os.environ.get("APRS_CALLSIGN")
-    aprs_host = os.environ.get("APRS_HOST", DEFAULT_APRS_HOST)
+    def OsmandURL(url):
+        u = urlparse(url)
+        u = u._replace(scheme="http", netloc=u.hostname+":5055", path = "")
+        return(urlunparse(u))
 
-    if not aprs_callsign:
+    config = {}
+    config["TraccarHost"] = os.environ.get("TRACCAR_HOST", DEFAULT_TRACCAR_HOST)
+    config["TraccarUser"] = os.environ.get("TRACCAR_USER", "")
+    config["TraccarPassword"] = os.environ.get("TRACCAR_PASSWORD", "")
+    config["TraccarKeyword"] = os.environ.get("TRACCAR_KEYWORD", DEFAULT_TRACCAR_KEYWORD)
+    config["TraccarInterval"] = int(os.environ.get("TRACCAR_INTERVAL", DEFAULT_TRACCAR_INTERVAL))
+    config["AprsCallsign"] = os.environ.get("APRS_CALLSIGN")
+    config["AprsHost"] = os.environ.get("APRS_HOST", DEFAULT_APRS_HOST)
+    config["TraccarOsmand"] = os.environ.get("TRACCAR_OSMAND", OsmandURL(config["TraccarHost"]))
+    
+    if not config["AprsCallsign"]:
         logging.fatal("Please provide your callsign to login to the APRS server.")
         exit(1)
 
-    A2T = APRS2Traccar(traccar_host, traccar_user, traccar_password, traccar_keyword, aprs_callsign, aprs_host)
+    A2T = APRS2Traccar(config)
 
     logging.getLogger('apscheduler.executors.default').setLevel(logging.WARNING)
     sched = BlockingScheduler()
-    sched.add_job(A2T.poll, 'interval', next_run_time=datetime.now(), seconds=traccar_interval)
+    sched.add_job(A2T.poll, 'interval', next_run_time=datetime.now(), seconds=config["TraccarInterval"])
     sched.start()
 
 
