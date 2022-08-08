@@ -221,9 +221,9 @@ class APRS2Traccar():
                 for att, value in attributes.items():
                     if re.search("^" + self.TraccarKeyword + "[0-9]{0,1}$", att.lower()):
                         callsign = value.upper().strip()
-                        if re.search("^[A-Z]{1,2}[0-9][A-Z]{1,3}(-[A-Z0-9]{1,2}){0,1}$", callsign):
-                            unid = j["uniqueId"]
-                            filterdict[callsign] = filterdict.get(callsign, []) + [unid]
+                        # if re.search("^[A-Z]{1,2}[0-9][A-Z]{1,3}(-[A-Z0-9]{1,2}){0,1}$", callsign):
+                        unid = j["uniqueId"]
+                        filterdict[callsign] = filterdict.get(callsign, []) + [unid]
 
         LOGGER.debug(f"Attributes: {filterdict}")
 
