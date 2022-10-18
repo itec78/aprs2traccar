@@ -11,7 +11,7 @@ Clone this repo and then add this to your `docker-compose.yml` file:
 
 ```yaml
   aprs2traccar:
-    build: https://github.com/itec78/aprs2traccar.git
+    build: https://github.com/traccartools/aprs2traccar.git
     container_name: aprs2traccar  # optional
     environment:
       - "APRS_CALLSIGN=FO0BAR"
